@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meu Banco de Estudos Solo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .glass {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen w-screen flex flex-col justify-between font-sans select-none overflow-x-hidden">
+
+  <!-- CABEÇALHO DE PROGRESSO -->
+  <header class="w-full py-4 px-8 border-b border-slate-800 glass flex justify-between items-center sticky top-0 z-50">
+    <div class="flex items-center gap-3">
+      <div class="p-2.5 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30">
+        <i data-lucide="book-open-check" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h1 class="text-xl font-black uppercase text-white tracking-wider">ESTUDO INDIVIDUAL</h1>
+        <p class="text-xs text-slate-400">Banco de Exercícios Pessoal</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-amber-500/30">
+        <i data-lucide="flame" class="w-5 h-5 text-amber-500 fill-amber-500"></i>
+        <span id="streak" class="text-lg font-black text-amber-500">0</span>
+        <span class="text-xs font-bold text-amber-400 uppercase hidden sm:inline">Sequência</span>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-2xl border border-emerald-500/30">
+        <i data-lucide="trophy" class="w-5 h-5 text-emerald-400"></i>
+        <span id="xp-text" class="text-lg font-black text-emerald-400">0 XP</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PAINEL CENTRAL DE QUESTÕES -->
+  <main class="flex-1 p-8 max-w-3xl mx-auto w-full flex flex-col justify-center items-center gap-6">
+
+    <!-- INDICADOR DE POSIÇÃO -->
+    <div class="w-full flex justify-between items-center text-xs text-slate-400 font-bold uppercase">
+      <span id="posicao-questao">Carregando questões...</span>
+      <span id="status-banco" class="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">Conectado</span>
+    </div>
+
+    <!-- CARD DA QUESTÃO -->
+    <div class="glass p-8 rounded-3xl w-full border-l-8 border-l-indigo-500 shadow-2xl space-y-6">
+      <h2 id="enunciado-texto" class="text-xl font-bold text-white leading-relaxed">
+        Buscando exercícios cadastrados na sua planilha...
+      </h2>
+
+      <!-- OPÇÕES DE RESPOSTA -->
+      <div id="container-opcoes" class="space-y-3">
+        <!-- As alternativas serão inseridas dinamicamente aqui -->
+      </div>
+    </div>
+
+    <!-- FEEDBACK E EXPLICAÇÃO -->
+    <div id="box-feedback" class="w-full p-6 rounded-3xl glass border border-slate-800 hidden flex-col gap-3">
+      <div class="flex items-center gap-3">
+        <div id="feedback-icon" class="p-2 rounded-xl"></div>
+        <h3 id="feedback-titulo" class="text-lg font-black"></h3>
+      </div>
+      <div id="resolucao-container" class="text-xs font-mono text-slate-300 bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+        <span class="text-emerald-400 font-bold block mb-1">Explicação / Resolução:</span>
+        <p id="resolucao-texto">Sem explicação registrada para este exercício.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- RODAPÉ DE CONTROLE -->
+  <footer class="w-full py-4 px-8 border-t border-slate-800 glass flex justify-between items-center text-xs text-slate-400">
+    <button onclick="carregarPlanilha()" class="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-slate-300 transition-all">
+      <i id="icone-sync" data-lucide="refresh-cw" class="w-4 h-4"></i>
+      <span>Sincronizar Banco</span>
+    </button>
+
+    <div class="flex gap-4">
+      <button id="btn-verificar" onclick="verificarResposta()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/30">
+        Verificar Resposta
+      </button>
+      <button id="btn-proxima" onclick="proximaQuestao()" class="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-600/30 hidden">
+        Próxima Questão →
+      </button>
+    </div>
+  </footer>
+
+  <script>
+    lucide.createIcons();
+
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQGOvFTkR7aF5aNJfhrashKQVV8th34sxTh6n0o34dFGtVDHPogo32N2Gv2J286qyvUIMgmZQPUjpfM/pub?gid=522069472&single=true&output=csv";
+
+    let questoes = [];
+    let indiceAtual = 0;
+    let opcaoSelecionada = null;
+    let xp = 0;
+    let streak = 0;
+
+    async function carregarPlanilha() {
+      const iconeSync = document.getElementById('icone-sync');
+      if (iconeSync) iconeSync.classList.add('animate-spin');
+
+      try {
+        const urlAntiCache = `${csvUrl}&nocache=${new Date().getTime()}`;
+        const res = await fetch(urlAntiCache, { cache: "no-store" });
+        const csvText = await res.text();
+        
+        const linhas = processarCSV(csvText);
+        if (linhas.length < 2) return;
+
+        const dados = linhas.slice(1);
+
+        questoes = dados
+          .map(linha => {
+            // Filtra e guarda APENAS os campos com texto preenchido,
+            // ignorando células vazias e a data/hora (que contém '/' e ':')
+            const valores = linha
+              .map(c => (c || '').trim())
+              .filter(c => c !== '' && !c.includes('/') && !c.includes(':'));
+
+            // Espera pegar nesta ordem exata:
+            // valores[0]: Enunciado ("10 + 10")
+            // valores[1]: Opção A ("20")
+            // valores[2]: Opção B ("30")
+            // valores[3]: Gabarito ("A")
+            // valores[4]: Resolução ("10 + 10 = 20")
+            if (valores.length >= 3) {
+              return {
+                enunciado: valores[0],
+                opcaoA: valores[1],
+                opcaoB: valores[2] || 'Opção B',
+                gabarito: (valores[3] || 'A').toUpperCase(),
+                resolucao: valores[4] || 'Sem explicação registrada para este exercício.'
+              };
+            }
+            return null;
+          })
+          .filter(q => q !== null);
+
+        if (questoes.length > 0) {
+          indiceAtual = 0;
+          exibirQuestao();
+        } else {
+          document.getElementById('posicao-questao').innerText = "Questão 0 de 0";
+          document.getElementById('enunciado-texto').innerText = "Nenhuma questão encontrada. Cadastre perguntas no seu Google Forms!";
+          document.getElementById('container-opcoes').innerHTML = "";
+        }
+      } catch (e) {
+        console.error("Erro ao carregar banco:", e);
+        document.getElementById('enunciado-texto').innerText = "Erro ao conectar com a planilha. Verifique o link e tente novamente.";
+      } finally {
+        if (iconeSync) setTimeout(() => iconeSync.classList.remove('animate-spin'), 500);
+      }
+    }
+
+    function processarCSV(texto) {
+      const resultado = [];
+      let linhaAtual = [];
+      let dentroDeAspas = false;
+      let campo = '';
+
+      for (let i = 0; i < texto.length; i++) {
+        const char = texto[i];
+        const proxChar = texto[i + 1];
+
+        if (char === '"') {
+          if (dentroDeAspas && proxChar === '"') {
+            campo += '"';
+            i++;
+          } else {
+            dentroDeAspas = !dentroDeAspas;
+          }
+        } else if (char === ',' && !dentroDeAspas) {
+          linhaAtual.push(campo);
+          campo = '';
+        } else if ((char === '\n' || char === '\r') && !dentroDeAspas) {
+          if (char === '\r' && proxChar === '\n') i++;
+          linhaAtual.push(campo);
+          if (linhaAtual.some(c => c.trim() !== '')) {
+            resultado.push(linhaAtual);
+          }
+          linhaAtual = [];
+          campo = '';
+        } else {
+          campo += char;
+        }
+      }
+      if (campo || linhaAtual.length > 0) {
+        linhaAtual.push(campo);
+        if (linhaAtual.some(c => c.trim() !== '')) {
+          resultado.push(linhaAtual);
+        }
+      }
+      return resultado;
+    }
+
+    function exibirQuestao() {
+      opcaoSelecionada = null;
+      document.getElementById('box-feedback').classList.add('hidden');
+      document.getElementById('box-feedback').classList.remove('flex');
+      document.getElementById('btn-verificar').classList.remove('hidden');
+      document.getElementById('btn-proxima').classList.add('hidden');
+
+      const q = questoes[indiceAtual];
+      document.getElementById('posicao-questao').innerText = `Questão ${indiceAtual + 1} de ${questoes.length}`;
+      document.getElementById('enunciado-texto').innerText = q.enunciado;
+
+      const container = document.getElementById('container-opcoes');
+      container.innerHTML = `
+        <button onclick="selecionarOpcao('A')" id="opt-A" class="w-full p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 hover:border-indigo-500/50 text-left flex justify-between items-center transition-all">
+          <span><strong class="text-indigo-400">A)</strong> ${q.opcaoA}</span>
+        </button>
+        <button onclick="selecionarOpcao('B')" id="opt-B" class="w-full p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 hover:border-indigo-500/50 text-left flex justify-between items-center transition-all">
+          <span><strong class="text-indigo-400">B)</strong> ${q.opcaoB}</span>
+        </button>
+      `;
+    }
+
+    function selecionarOpcao(letra) {
+      opcaoSelecionada = letra;
+      ['A', 'B'].forEach(l => {
+        const el = document.getElementById(`opt-${l}`);
+        if (el) {
+          if (l === letra) {
+            el.className = "w-full p-4 rounded-2xl bg-indigo-950/60 border-2 border-indigo-500 text-indigo-200 font-bold text-left flex justify-between items-center transition-all shadow-lg shadow-indigo-500/10";
+          } else {
+            el.className = "w-full p-4 rounded-2xl bg-slate-900 border-2 border-slate-800 text-slate-400 text-left flex justify-between items-center transition-all opacity-60";
+          }
+        }
+      });
+    }
+
+    function verificarResposta() {
+      if (!opcaoSelecionada) {
+        alert("Por favor, selecione uma opção antes de verificar!");
+        return;
+      }
+
+      const q = questoes[indiceAtual];
+      const gabaritoLimpo = q.gabarito.includes('B') ? 'B' : 'A';
+      const acertou = (opcaoSelecionada === gabaritoLimpo);
+
+      const box = document.getElementById('box-feedback');
+      const icon = document.getElementById('feedback-icon');
+      const titulo = document.getElementById('feedback-titulo');
+
+      box.classList.remove('hidden');
+      box.classList.add('flex');
+
+      if (acertou) {
+        xp += 100;
+        streak += 1;
+        icon.className = "p-2 bg-emerald-500 text-slate-950 rounded-xl";
+        icon.innerHTML = `<i data-lucide="check" class="w-6 h-6"></i>`;
+        titulo.className = "text-lg font-black text-emerald-400";
+        titulo.innerText = "Resposta Correta! (+100 XP)";
+      } else {
+        streak = 0;
+        icon.className = "p-2 bg-rose-500 text-white rounded-xl";
+        icon.innerHTML = `<i data-lucide="x" class="w-6 h-6"></i>`;
+        titulo.className = "text-lg font-black text-rose-400";
+        titulo.innerText = `Incorreto! O gabarito oficial era a Opção ${gabaritoLimpo}`;
+      }
+
+      document.getElementById('resolucao-texto').innerText = q.resolucao;
+      document.getElementById('xp-text').innerText = `${xp} XP`;
+      document.getElementById('streak').innerText = streak;
+
+      document.getElementById('btn-verificar').classList.add('hidden');
+      document.getElementById('btn-proxima').classList.remove('hidden');
+      
+      lucide.createIcons();
+    }
+
+    function proximaQuestao() {
+      if (indiceAtual + 1 < questoes.length) {
+        indiceAtual++;
+        exibirQuestao();
+      } else {
+        document.getElementById('posicao-questao').innerText = `Concluído (${questoes.length} de ${questoes.length})`;
+        document.getElementById('enunciado-texto').innerText = "Excelente trabalho! Você concluiu todas as questões do seu banco de estudos.";
+        document.getElementById('container-opcoes').innerHTML = "";
+        document.getElementById('box-feedback').classList.add('hidden');
+        document.getElementById('btn-proxima').classList.add('hidden');
+      }
+    }
+
+    window.onload = carregarPlanilha;
+  </script>
+</body>
+</html>
